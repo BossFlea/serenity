@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::num::NonZeroU16;
 
 use extract_map::entry::Entry;
 
@@ -47,7 +46,6 @@ use crate::model::guild::{
     Role,
     ScheduledEvent,
 };
-use crate::model::id::GuildId;
 use crate::model::user::{CurrentUser, OnlineStatus};
 use crate::model::voice::VoiceState;
 
@@ -109,7 +107,7 @@ impl CacheUpdate for ChannelPinsUpdateEvent {
 }
 
 impl CacheUpdate for GuildCreateEvent {
-    type Output = Vec<GuildId>;
+    type Output = std::convert::Infallible;
 
     fn update(&mut self, cache: &Cache) -> Option<Self::Output> {
         cache.unavailable_guilds.remove(&self.guild.id);
@@ -117,12 +115,7 @@ impl CacheUpdate for GuildCreateEvent {
 
         cache.guilds.insert(self.guild.id, guild);
 
-        if cache.unavailable_guilds.len() == 0 {
-            cache.unavailable_guilds.shrink_to_fit();
-            Some(cache.guilds.iter().map(|i| *i.key()).collect())
-        } else {
-            None
-        }
+        None
     }
 }
 
@@ -469,7 +462,7 @@ impl CacheUpdate for PresenceUpdateEvent {
 }
 
 impl CacheUpdate for ReadyEvent {
-    type Output = NonZeroU16;
+    type Output = std::convert::Infallible;
 
     fn update(&mut self, cache: &Cache) -> Option<Self::Output> {
         for unavailable in &self.ready.guilds {
@@ -477,20 +470,16 @@ impl CacheUpdate for ReadyEvent {
             cache.unavailable_guilds.insert(unavailable.id, ());
         }
 
-        let shard_info = self.ready.shard.unwrap_or_default();
+        let shard_data = self.ready.shard.unwrap_or_default();
 
+        {
+            let mut cached_shard_data = cache.shard_data.write();
+            cached_shard_data.total = shard_data.total;
+            cached_shard_data.connected.insert(shard_data.id);
+        }
         cache.user.write().clone_from(&self.ready.user);
 
-        let mut shards = cache.shard_data.write();
-        shards.total = shard_info.total;
-        shards.connected.insert(shard_info.id);
-
-        if shards.connected.len() == shards.total.get() as usize && !shards.has_sent_shards_ready {
-            shards.has_sent_shards_ready = true;
-            Some(shards.total)
-        } else {
-            None
-        }
+        None
     }
 }
 
