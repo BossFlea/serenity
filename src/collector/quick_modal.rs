@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::all::CreateComponent;
 use crate::builder::{CreateActionRow, CreateInputText, CreateInteractionResponse, CreateModal};
 use crate::collector::ModalInteractionCollector;
 use crate::gateway::client::Context;
@@ -12,6 +13,8 @@ pub struct QuickModalResponse {
 }
 
 /// Convenience builder to create a modal, wait for the user to submit and parse the response.
+///
+/// **Note**: Currently only supports ActionRows for data collection.
 ///
 /// ```rust
 /// # use serenity::{builder::*, model::prelude::*, prelude::*, collector::*, Result};
@@ -36,11 +39,7 @@ pub struct CreateQuickModal<'a> {
 
 impl<'a> CreateQuickModal<'a> {
     pub fn new(title: impl Into<Cow<'a, str>>) -> Self {
-        Self {
-            title: title.into(),
-            timeout: None,
-            input_texts: Vec::new(),
-        }
+        Self { title: title.into(), timeout: None, input_texts: Vec::new() }
     }
 
     /// Sets a timeout when waiting for the modal response.
@@ -65,14 +64,14 @@ impl<'a> CreateQuickModal<'a> {
     ///
     /// Wraps [`Self::field`].
     pub fn short_field(self, label: impl Into<Cow<'a, str>>) -> Self {
-        self.field(CreateInputText::new(InputTextStyle::Short, label, ""))
+        self.field(CreateInputText::new(InputTextStyle::Short, "").label(label))
     }
 
     /// Convenience method to add a multi-line input text field.
     ///
     /// Wraps [`Self::field`].
     pub fn paragraph_field(self, label: impl Into<Cow<'a, str>>) -> Self {
-        self.field(CreateInputText::new(InputTextStyle::Paragraph, label, ""))
+        self.field(CreateInputText::new(InputTextStyle::Paragraph, "").label(label))
     }
 
     /// # Errors
@@ -91,7 +90,9 @@ impl<'a> CreateQuickModal<'a> {
                     .into_iter()
                     .enumerate()
                     .map(|(i, input_text)| {
-                        CreateActionRow::InputText(input_text.custom_id(i.to_string()))
+                        CreateComponent::ActionRow(CreateActionRow::InputText(
+                            input_text.custom_id(i.to_string()),
+                        ))
                     })
                     .collect::<Vec<_>>(),
             ),
@@ -114,23 +115,33 @@ impl<'a> CreateQuickModal<'a> {
             .data
             .components
             .iter()
-            .filter_map(|row| match row.components.first() {
-                Some(ActionRowComponent::InputText(text)) => {
-                    if let Some(value) = &text.value {
-                        Some(value.clone())
-                    } else {
-                        tracing::warn!("input text value was empty in modal response");
-                        None
+            .filter_map(|component| {
+                if let Component::ActionRow(row) = component {
+                    match row.components.first() {
+                        Some(ActionRowComponent::InputText(text)) => {
+                            if let Some(value) = &text.value {
+                                Some(value.clone())
+                            } else {
+                                tracing::warn!("input text value was empty in modal response");
+                                None
+                            }
+                        },
+                        Some(other) => {
+                            tracing::warn!(
+                                "expected input text in modal response, got {:?}",
+                                other
+                            );
+                            None
+                        },
+                        None => {
+                            tracing::warn!("empty action row");
+                            None
+                        },
                     }
-                },
-                Some(other) => {
-                    tracing::warn!("expected input text in modal response, got {:?}", other);
+                } else {
+                    tracing::warn!("unsupported quick modal component");
                     None
-                },
-                None => {
-                    tracing::warn!("empty action row");
-                    None
-                },
+                }
             })
             .collect();
 

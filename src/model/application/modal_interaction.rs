@@ -2,9 +2,7 @@ use serde::Serialize;
 
 #[cfg(feature = "model")]
 use crate::builder::{
-    CreateInteractionResponse,
-    CreateInteractionResponseFollowup,
-    CreateInteractionResponseMessage,
+    CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
     EditInteractionResponse,
 };
 #[cfg(feature = "model")]
@@ -215,5 +213,5 @@ pub struct ModalInteractionData {
     /// The custom id of the modal
     pub custom_id: FixedString,
     /// The components.
-    pub components: FixedArray<ActionRow>,
+    pub components: FixedArray<Component>,
 }

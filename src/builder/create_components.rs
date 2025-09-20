@@ -105,6 +105,10 @@ pub enum CreateComponent<'a> {
     ///
     /// A container is a flexible component that can hold multiple nested components.
     Container(CreateContainer<'a>),
+    /// Represents a label component (V2).
+    ///
+    /// A label wraps a modal component with text as a label and optional description.
+    Label(CreateLabel<'a>),
 }
 
 /// A builder to create a section component, supports up to a max of **3** components with an
@@ -127,11 +131,7 @@ impl<'a> CreateSection<'a> {
         components: impl Into<Cow<'a, [CreateSectionComponent<'a>]>>,
         accessory: CreateSectionAccessory<'a>,
     ) -> Self {
-        CreateSection {
-            kind: StaticU8::<9>,
-            components: components.into(),
-            accessory,
-        }
+        CreateSection { kind: StaticU8::<9>, components: components.into(), accessory }
     }
 
     /// Sets the components for the section. Replaces the current value as set in [`Self::new`].
@@ -182,10 +182,7 @@ impl<'a> CreateTextDisplay<'a> {
     ///
     /// Note: All components on a message shares the same **4000** character limit.
     pub fn new(content: impl Into<Cow<'a, str>>) -> Self {
-        CreateTextDisplay {
-            kind: StaticU8::<10>,
-            content: content.into(),
-        }
+        CreateTextDisplay { kind: StaticU8::<10>, content: content.into() }
     }
 
     /// Sets the content of this text display component. Replaces the current value as set in
@@ -224,12 +221,7 @@ pub struct CreateThumbnail<'a> {
 impl<'a> CreateThumbnail<'a> {
     /// Creates a new thumbnail with a media item.
     pub fn new(media: CreateUnfurledMediaItem<'a>) -> Self {
-        CreateThumbnail {
-            kind: StaticU8::<11>,
-            media,
-            description: None,
-            spoiler: None,
-        }
+        CreateThumbnail { kind: StaticU8::<11>, media, description: None, spoiler: None }
     }
 
     /// Sets the media item. Replaces the current value as set in [`Self::new`].
@@ -261,9 +253,7 @@ pub struct CreateUnfurledMediaItem<'a> {
 impl<'a> CreateUnfurledMediaItem<'a> {
     /// Creates a new media item.
     pub fn new(url: impl Into<Cow<'a, str>>) -> Self {
-        CreateUnfurledMediaItem {
-            url: url.into(),
-        }
+        CreateUnfurledMediaItem { url: url.into() }
     }
 
     /// Sets the url to this media item. Replaces the current value as set in [`Self::new`].
@@ -287,10 +277,7 @@ pub struct CreateMediaGallery<'a> {
 impl<'a> CreateMediaGallery<'a> {
     /// Creates a new media gallery with up to **10** items.
     pub fn new(items: impl Into<Cow<'a, [CreateMediaGalleryItem<'a>]>>) -> Self {
-        CreateMediaGallery {
-            kind: StaticU8::<12>,
-            items: items.into(),
-        }
+        CreateMediaGallery { kind: StaticU8::<12>, items: items.into() }
     }
 
     /// Sets the items of the gallery. Replaces the current value as set in [`Self::new`].
@@ -325,11 +312,7 @@ pub struct CreateMediaGalleryItem<'a> {
 impl<'a> CreateMediaGalleryItem<'a> {
     /// Create a new media gallery item.
     pub fn new(media: CreateUnfurledMediaItem<'a>) -> Self {
-        CreateMediaGalleryItem {
-            media,
-            description: None,
-            spoiler: None,
-        }
+        CreateMediaGalleryItem { media, description: None, spoiler: None }
     }
 
     /// Sets the internal media item. Replaces the current value as set in [`Self::new`].
@@ -383,11 +366,7 @@ impl<'a> CreateFile<'a> {
     /// Create a new builder for the file component. Refer to this builders documentation for
     /// limits.
     pub fn new(file: impl Into<CreateUnfurledMediaItem<'a>>) -> Self {
-        CreateFile {
-            kind: StaticU8::<13>,
-            file: file.into(),
-            spoiler: None,
-        }
+        CreateFile { kind: StaticU8::<13>, file: file.into(), spoiler: None }
     }
 
     // Only supports `attachment://filename.extension` format, refer to this builders documentation
@@ -418,11 +397,7 @@ pub struct CreateSeparator {
 impl CreateSeparator {
     /// Creates a new separator, with or without a divider.
     pub fn new(divider: bool) -> Self {
-        CreateSeparator {
-            kind: StaticU8::<14>,
-            divider,
-            spacing: None,
-        }
+        CreateSeparator { kind: StaticU8::<14>, divider, spacing: None }
     }
 
     /// Sets if this separator should have a divider or not. Replaces the current value as set in
@@ -499,6 +474,52 @@ impl<'a> CreateContainer<'a> {
         self.components.to_mut().push(component);
         self
     }
+}
+
+/// A builder to create a label component.
+#[derive(Clone, Debug, Serialize)]
+#[must_use]
+pub struct CreateLabel<'a> {
+    #[serde(rename = "type")]
+    kind: StaticU8<18>,
+    label: Cow<'a, str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<Cow<'a, str>>,
+    component: CreateLabelComponent<'a>,
+}
+
+impl<'a> CreateLabel<'a> {
+    /// Creates a new builder with the specified components and accessory.
+    pub fn new(label: impl Into<Cow<'a, str>>, component: CreateLabelComponent<'a>) -> Self {
+        CreateLabel { kind: StaticU8::<18>, label: label.into(), description: None, component }
+    }
+
+    /// Sets the label of this component. Can be up to 45 characters. Replaces the current value as set in [`Self::new`].
+    pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    /// Sets the description of this label.
+    pub fn description(mut self, description: impl Into<Cow<'a, str>>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Sets the component for the label. Replaces the current value as set in [`Self::new`].
+    pub fn component(mut self, component: CreateLabelComponent<'a>) -> Self {
+        self.component = component;
+        self
+    }
+}
+
+/// An enum of all valid label components.
+#[derive(Clone, Debug, Serialize)]
+#[must_use]
+#[serde(untagged)]
+pub enum CreateLabelComponent<'a> {
+    InputText(CreateInputText<'a>),
+    SelectMenu(CreateSelectMenu<'a>),
 }
 
 enum_number! {
@@ -627,16 +648,9 @@ impl<'a> CreateButton<'a> {
 impl From<Button> for CreateButton<'_> {
     fn from(button: Button) -> Self {
         let (style, url, custom_id, sku_id) = match button.data {
-            ButtonKind::Link {
-                url,
-            } => (ButtonStyle::Unknown(5), Some(url.into()), None, None),
-            ButtonKind::Premium {
-                sku_id,
-            } => (ButtonStyle::Unknown(6), None, None, Some(sku_id)),
-            ButtonKind::NonLink {
-                custom_id,
-                style,
-            } => (style, None, Some(custom_id.into()), None),
+            ButtonKind::Link { url } => (ButtonStyle::Unknown(5), Some(url.into()), None, None),
+            ButtonKind::Premium { sku_id } => (ButtonStyle::Unknown(6), None, None, Some(sku_id)),
+            ButtonKind::NonLink { custom_id, style } => (style, None, Some(custom_id.into()), None),
         };
 
         Self {
@@ -771,6 +785,8 @@ pub struct CreateSelectMenu<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_values: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     disabled: Option<bool>,
 
     #[serde(flatten)]
@@ -786,6 +802,7 @@ impl<'a> CreateSelectMenu<'a> {
             placeholder: None,
             min_values: None,
             max_values: None,
+            required: None,
             disabled: None,
             kind,
         }
@@ -816,7 +833,17 @@ impl<'a> CreateSelectMenu<'a> {
         self
     }
 
-    /// Sets the disabled state for the button.
+    /// Sets if the select menu is required.
+    ///
+    /// **Note**: This is only available in modals, it is ignored in messages.
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = Some(required);
+        self
+    }
+
+    /// Sets the disabled state for the select menu.
+    ///
+    /// **Note**: This is only available in messages, using it in modals will result in an error.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = Some(disabled);
         self
@@ -906,16 +933,11 @@ pub struct CreateInputText<'a> {
 impl<'a> CreateInputText<'a> {
     /// Creates a text input with the given style, label, and custom id (a developer-defined
     /// identifier), leaving all other fields empty.
-    pub fn new(
-        style: InputTextStyle,
-        label: impl Into<Cow<'a, str>>,
-        custom_id: impl Into<Cow<'a, str>>,
-    ) -> Self {
+    pub fn new(style: InputTextStyle, custom_id: impl Into<Cow<'a, str>>) -> Self {
         Self {
             style,
-            label: Some(label.into()),
+            label: None,
             custom_id: custom_id.into(),
-
             placeholder: None,
             min_length: None,
             max_length: None,
@@ -932,7 +954,9 @@ impl<'a> CreateInputText<'a> {
         self
     }
 
-    /// Sets the label of this input text. Replaces the current value as set in [`Self::new`].
+    /// Sets the label of this input text.
+    ///
+    /// **Note**: This is mandatory when in an ActionRow, but must be unset when in a Label.
     pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
         self.label = Some(label.into());
         self
@@ -969,7 +993,7 @@ impl<'a> CreateInputText<'a> {
         self
     }
 
-    /// Sets if the input text is required
+    /// Sets if the input text is required.
     pub fn required(mut self, required: bool) -> Self {
         self.required = required;
         self

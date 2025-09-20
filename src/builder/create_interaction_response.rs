@@ -3,12 +3,7 @@ use std::collections::HashMap;
 
 use super::create_poll::Ready;
 use super::{
-    CreateActionRow,
-    CreateAllowedMentions,
-    CreateAttachment,
-    CreateComponent,
-    CreateEmbed,
-    CreatePoll,
+    CreateAllowedMentions, CreateAttachment, CreateComponent, CreateEmbed, CreatePoll,
     EditAttachments,
 };
 #[cfg(feature = "http")]
@@ -72,16 +67,19 @@ impl serde::Serialize for CreateInteractionResponse<'_> {
         use serde::ser::SerializeMap as _;
 
         let mut map = serializer.serialize_map(Some(2))?;
-        map.serialize_entry("type", &match self {
-            Self::Pong => 1,
-            Self::Message(_) => 4,
-            Self::Defer(_) => 5,
-            Self::Acknowledge => 6,
-            Self::UpdateMessage(_) => 7,
-            Self::Autocomplete(_) => 8,
-            Self::Modal(_) => 9,
-            Self::LaunchActivity => 12,
-        })?;
+        map.serialize_entry(
+            "type",
+            &match self {
+                Self::Pong => 1,
+                Self::Message(_) => 4,
+                Self::Defer(_) => 5,
+                Self::Acknowledge => 6,
+                Self::UpdateMessage(_) => 7,
+                Self::Autocomplete(_) => 8,
+                Self::Modal(_) => 9,
+                Self::LaunchActivity => 12,
+            },
+        )?;
 
         match self {
             Self::Autocomplete(x) => map.serialize_entry("data", &x)?,
@@ -343,11 +341,7 @@ pub struct AutocompleteChoice<'a> {
 
 impl<'a> AutocompleteChoice<'a> {
     pub fn new(name: impl Into<Cow<'a, str>>, value: impl Into<AutocompleteValue<'a>>) -> Self {
-        Self {
-            name: name.into(),
-            name_localizations: None,
-            value: value.into(),
-        }
+        Self { name: name.into(), name_localizations: None, value: value.into() }
     }
 
     pub fn add_localized_name(
@@ -424,7 +418,7 @@ impl<'a> CreateAutocompleteResponse<'a> {
 #[derive(Clone, Debug, Default, Serialize)]
 #[must_use]
 pub struct CreateModal<'a> {
-    components: Cow<'a, [CreateActionRow<'a>]>,
+    components: Cow<'a, [CreateComponent<'a>]>,
     custom_id: Cow<'a, str>,
     title: Cow<'a, str>,
 }
@@ -432,17 +426,13 @@ pub struct CreateModal<'a> {
 impl<'a> CreateModal<'a> {
     /// Creates a new modal.
     pub fn new(custom_id: impl Into<Cow<'a, str>>, title: impl Into<Cow<'a, str>>) -> Self {
-        Self {
-            components: Cow::default(),
-            custom_id: custom_id.into(),
-            title: title.into(),
-        }
+        Self { components: Cow::default(), custom_id: custom_id.into(), title: title.into() }
     }
 
     /// Sets the components of this message.
     ///
     /// Overwrites existing components.
-    pub fn components(mut self, components: impl Into<Cow<'a, [CreateActionRow<'a>]>>) -> Self {
+    pub fn components(mut self, components: impl Into<Cow<'a, [CreateComponent<'a>]>>) -> Self {
         self.components = components.into();
         self
     }

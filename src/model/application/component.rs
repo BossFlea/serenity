@@ -27,6 +27,7 @@ enum_number! {
         File = 13,
         Separator = 14,
         Container = 17,
+        Label = 18,
         _ => Unknown(u8),
     }
 }
@@ -53,6 +54,7 @@ pub enum Component {
     Separator(Separator),
     File(FileComponent),
     Container(Container),
+    Label(Label),
     Unknown(u8),
 }
 
@@ -93,6 +95,7 @@ impl<'de> Deserialize<'de> for Component {
             ComponentType::File => Deserialize::deserialize(value).map(Component::File),
             ComponentType::Container => Deserialize::deserialize(value).map(Component::Container),
             ComponentType::Thumbnail => Deserialize::deserialize(value).map(Component::Thumbnail),
+            ComponentType::Label => Deserialize::deserialize(value).map(Component::Label),
             ComponentType(i) => Ok(Component::Unknown(i)),
         }
         .map_err(DeError::custom)
@@ -171,7 +174,7 @@ pub struct TextDisplay {
     #[serde(rename = "type")]
     pub kind: ComponentType,
     /// The content of this text display component.
-    pub content: FixedString<u16>,
+    pub content: Option<FixedString<u16>>,
 }
 
 /// A Media Gallery is a component that allows you to display media attachments in an organized
@@ -270,6 +273,70 @@ pub struct Container {
     /// [`ComponentType::TextDisplay`], [`ComponentType::MediaGallery`], [`ComponentType::File`] or
     /// [`ComponentType::Separator`]
     pub components: FixedArray<Component>,
+}
+
+/// A label component, wraps an input text or select menu in modals.
+///
+/// [Discord docs](https://discord.com/developers/docs/components/reference#label)
+#[cfg_attr(feature = "typesize", derive(typesize::derive::TypeSize))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct Label {
+    /// Always [`ComponentType::Label`]
+    #[serde(rename = "type")]
+    pub kind: ComponentType,
+    /// The component associated with this label.
+    pub component: LabelComponent,
+}
+
+/// A component which can be inside of a [`Label`].
+///
+/// [Discord docs](https://discord.com/developers/docs/interactions/message-components#component-object-component-types).
+#[cfg_attr(feature = "typesize", derive(typesize::derive::TypeSize))]
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum LabelComponent {
+    SelectMenu(SelectMenu),
+    InputText(InputText),
+}
+
+impl<'de> Deserialize<'de> for LabelComponent {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct LabelRaw {
+            #[serde(rename = "type")]
+            kind: ComponentType,
+        }
+
+        let raw_data = <&RawValue>::deserialize(deserializer)?;
+        let raw = LabelRaw::deserialize(raw_data).map_err(DeError::custom)?;
+
+        match raw.kind {
+            ComponentType::InputText => {
+                Deserialize::deserialize(raw_data).map(LabelComponent::InputText)
+            },
+            ComponentType::StringSelect
+            | ComponentType::UserSelect
+            | ComponentType::RoleSelect
+            | ComponentType::MentionableSelect
+            | ComponentType::ChannelSelect => {
+                Deserialize::deserialize(raw_data).map(LabelComponent::SelectMenu)
+            },
+            ComponentType(i) => {
+                return Err(DeError::custom(format_args!("Invalid component type {i}")));
+            },
+        }
+        .map_err(DeError::custom)
+    }
+}
+
+impl Serialize for LabelComponent {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        match self {
+            Self::InputText(c) => c.serialize(serializer),
+            Self::SelectMenu(c) => c.serialize(serializer),
+        }
+    }
 }
 
 /// An action row.
@@ -383,30 +450,14 @@ impl Serialize for ButtonKind {
         }
 
         let helper = match self {
-            ButtonKind::Link {
-                url,
-            } => Helper {
-                style: 5,
-                url: Some(url),
-                custom_id: None,
-                sku_id: None,
+            ButtonKind::Link { url } => {
+                Helper { style: 5, url: Some(url), custom_id: None, sku_id: None }
             },
-            ButtonKind::Premium {
-                sku_id,
-            } => Helper {
-                style: 6,
-                url: None,
-                custom_id: None,
-                sku_id: Some(*sku_id),
+            ButtonKind::Premium { sku_id } => {
+                Helper { style: 6, url: None, custom_id: None, sku_id: Some(*sku_id) }
             },
-            ButtonKind::NonLink {
-                custom_id,
-                style,
-            } => Helper {
-                style: style.0,
-                url: None,
-                custom_id: Some(custom_id),
-                sku_id: None,
+            ButtonKind::NonLink { custom_id, style } => {
+                Helper { style: style.0, url: None, custom_id: Some(custom_id), sku_id: None }
             },
         };
         helper.serialize(serializer)
@@ -452,11 +503,22 @@ enum_number! {
     }
 }
 
+#[cfg_attr(feature = "typesize", derive(typesize::derive::TypeSize))]
+#[derive(Clone, Debug, Serialize)]
+#[non_exhaustive]
+pub enum SelectMenuValues {
+    String(FixedArray<FixedString>),
+    User(FixedArray<UserId>),
+    Role(FixedArray<RoleId>),
+    Mentionable(FixedArray<GenericId>),
+    Channel(FixedArray<GenericChannelId>),
+}
+
 /// A select menu component.
 ///
 /// [Discord docs](https://discord.com/developers/docs/interactions/message-components#select-menu-object-select-menu-structure).
 #[cfg_attr(feature = "typesize", derive(typesize::derive::TypeSize))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[non_exhaustive]
 pub struct SelectMenu {
     /// The component type, which may either be [`ComponentType::StringSelect`],
@@ -465,7 +527,7 @@ pub struct SelectMenu {
     #[serde(rename = "type")]
     pub kind: ComponentType,
     /// An identifier defined by the developer for the select menu.
-    pub custom_id: Option<FixedString>,
+    pub custom_id: FixedString,
     /// The options of this select menu.
     ///
     /// Required for [`ComponentType::StringSelect`] and unavailable for all others.
@@ -483,6 +545,71 @@ pub struct SelectMenu {
     /// Whether select menu is disabled.
     #[serde(default)]
     pub disabled: bool,
+    /// Selected values
+    #[serde(flatten)]
+    pub values: Option<SelectMenuValues>,
+}
+
+impl<'de> Deserialize<'de> for SelectMenu {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize, Debug)]
+        struct SelectMenuRaw {
+            #[serde(rename = "type")]
+            kind: ComponentType,
+            custom_id: FixedString,
+            #[serde(default)]
+            options: FixedArray<SelectMenuOption>,
+            #[serde(default)]
+            channel_types: FixedArray<ChannelType>,
+            placeholder: Option<FixedString>,
+            min_values: Option<u8>,
+            max_values: Option<u8>,
+            #[serde(default)]
+            disabled: bool,
+            values: Option<serde_json::Value>,
+        }
+
+        let raw = SelectMenuRaw::deserialize(deserializer)?;
+
+        let values = raw
+            .values
+            .map(|val| {
+                match raw.kind {
+                    ComponentType::StringSelect => {
+                        serde_json::from_value(val).map(SelectMenuValues::String)
+                    },
+                    ComponentType::UserSelect => {
+                        serde_json::from_value(val).map(SelectMenuValues::User)
+                    },
+                    ComponentType::RoleSelect => {
+                        serde_json::from_value(val).map(SelectMenuValues::Role)
+                    },
+                    ComponentType::MentionableSelect => {
+                        serde_json::from_value(val).map(SelectMenuValues::Mentionable)
+                    },
+                    ComponentType::ChannelSelect => {
+                        serde_json::from_value(val).map(SelectMenuValues::Channel)
+                    },
+                    ComponentType(i) => {
+                        Err(DeError::custom(format_args!("Invalid component type {i}")))
+                    },
+                }
+                .map_err(DeError::custom)
+            })
+            .transpose()?;
+
+        Ok(SelectMenu {
+            kind: raw.kind,
+            custom_id: raw.custom_id,
+            options: raw.options,
+            channel_types: raw.channel_types,
+            placeholder: raw.placeholder,
+            min_values: raw.min_values,
+            max_values: raw.max_values,
+            disabled: raw.disabled,
+            values,
+        })
+    }
 }
 
 /// A select menu component options.
@@ -586,17 +713,14 @@ mod tests {
             json!({"type": 2, "style": 4, "custom_id": "hello", "label": "a", "disabled": false}),
         );
 
-        button.data = ButtonKind::Link {
-            url: FixedString::from_static_trunc("https://google.com"),
-        };
+        button.data =
+            ButtonKind::Link { url: FixedString::from_static_trunc("https://google.com") };
         assert_json(
             &button,
             json!({"type": 2, "style": 5, "url": "https://google.com", "label": "a", "disabled": false}),
         );
 
-        button.data = ButtonKind::Premium {
-            sku_id: 1234965026943668316.into(),
-        };
+        button.data = ButtonKind::Premium { sku_id: 1234965026943668316.into() };
         assert_json(
             &button,
             json!({"type": 2, "style": 6, "sku_id": "1234965026943668316", "label": "a", "disabled": false}),
